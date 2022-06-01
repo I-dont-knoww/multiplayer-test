@@ -33,9 +33,38 @@ function gameLoop(state) {
 
 function getUpdatedVelocity(player) {
     const {vel, keys} = player;
-    if (keys["ArrowLeft"]) return {x: vel.x - 1, y: vel.y};
-    if (keys["ArrowUp"]) return {x: vel.x, y: vel.y - 1};
-    if (keys["ArrowRight"]) return {x: vel.x + 1, y: vel.y};
-    if (keys["ArrowDown"]) return {x: vel.x, y: vel.y + 1};
+    
+    let controls = {
+        ArrowUp: "up",
+        ArrowLeft: "left",
+        ArrowDown: "down",
+        ArrowRight: "right",
+    };
+    
+    let x;
+    let y;
+    for (let i in keys) {
+        if (!keys[i]) continue;
+
+        let control = controls[i];
+        if (!control) continue;
+
+        if (control == "up") {
+            y = -1;
+        }
+        else if (control == "left") {
+            x = -1;
+        }
+        else if (control == "down") {
+            y = 1;
+        }
+        else if (control == "right") {
+            x = 1;
+        }
+    }
+
+    if (x && y) return {x: vel.x + x / Math.SQRT2, y: vel.y + y / Math.SQRT2};
+    if (x) return {x: vel.x + x, y: vel.y};
+    if (y) return {x: vel.x, y: vel.y + y};
     return vel;
 }
