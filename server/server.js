@@ -1,83 +1,70 @@
-const server = require("http").createServer();
-const io = require("socket.io")(server, {
-    cors: {
-        origin: "*"
-    }
-});
-const {createGameState, gameLoop, getUpdatedVelocity} = require("./game.js");
-const {makeid} = require("./utils.js");
-const {FRAME_RATE} = require("./constants.js");
+const {FRAME_RATE, FRICTION} = require("./constants.js");
 
-const state = {};
-const clientRooms = {};
+module.exports = {
+    createGameState,
+    gameLoop,
+    getUpdatedVelocity
+};
 
-io.on("connection", client => {
-    client.on("keydown", handleKeydown);
-    client.on("keyup", handleKeyup);
-    client.on("newGame", handleNewGame);
-    client.on("joinGame", handleJoinGame);
-    
-    function handleNewGame() {
-        let roomName = makeid(5);
-        clientRooms[client.id] = roomName;
-        client.emit("gameCode", roomName);
-        
-        state[roomName] = createGameState();
-        
-        client.join(roomName);
-        client.number = 0;
-        client.emit("init", 0);
-        
-        startGameInterval(roomName);
-    }
-    
-    function handleJoinGame(gameCode) {
-        const arr = Array.from(io.sockets.adapter.rooms);
-        let numClients;
-        
-        for (let i in arr) {
-            if (arr[i][0] == gameCode) {
-                numClients = arr[i][1].size;
+function createGameState() {
+    return {
+        players: [
+            {
+                pos: {x: 20, y: 20},
+                vel: {x: 0, y: 0},
+                keys: {}
             }
-        }
-        
-        if (numClients == 0) {
-            client.emit("unknownGame");
-            return;
-        }
-        
-        state[gameCode].players.push({pos: {x: 20, y: 20}, vel: {x: 0, y: 0}, keys: {}});
-        clientRooms[client.id] = gameCode;
-        client.join(gameCode);
-        client.number = numClients;
-        client.emit('init', client.number);
-    }
-    
-    function handleKeydown(keyCode) {
-        const roomName = clientRooms[client.id];
-        if (!roomName) return;
-        
-        state[roomName].players[client.number].keys[keyCode] = true;
-    }
-    
-    function handleKeyup(keyCode) {
-        const roomName = clientRooms[client.id];
-        if (!roomName) return;
-        
-        state[roomName].players[client.number].keys[keyCode] = false;
-    }
-});
-
-function startGameInterval(roomName) {
-    setInterval(_ => {
-        gameLoop(state[roomName]);
-        
-        emitGameState(roomName, state[roomName]);
-    }, 1000 / FRAME_RATE);
+        ]
+    };
 }
 
-function emitGameState(roomName, state) {
-    io.sockets.in(roomName).emit("gameState", JSON.stringify(state));
+function gameLoop(state) {
+    const {players} = state;
+    for (let i in players) {
+        players[i].pos.x += players[i].vel.x;
+        players[i].pos.y += players[i].vel.y;
+        
+        players[i].vel.x *= FRICTION;
+        players[i].vel.y *= FRICTION;
+        
+        players[i].vel = getUpdatedVelocity(players[i]);
+    }
 }
 
-io.listen(3000);
+function getUpdatedVelocity(player) {
+    const {vel, keys} = player;
+    
+    let controls = {
+        ArrowUp: "up",
+        ArrowLeft: "left",
+        ArrowDown: "down",
+        ArrowRight: "right",
+    };
+    
+    let x;
+    let y;
+    for (let i in keys) {
+        if (!keys[i]) continue;
+
+        let control = controls[i];
+        if (!control) continue;
+
+        if (control == "up") {
+            y = -1;
+        }
+        else if (control == "left") {
+            x = -1;
+        }
+        else if (control == "down") {
+            y = 1;
+        }
+        else if (control == "right") {
+            x = 1;
+        }
+    }
+
+    if (x && y) return {x: vel.x + x / Math.SQRT2, y: vel.y + y / Math.SQRT2};
+    if (x) return {x: vel.x + x, y: vel.y};
+    if (y) return {x: vel.x, y: vel.y + y};
+    return vel;
+}
